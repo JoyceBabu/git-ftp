@@ -46,6 +46,9 @@ KEYCHAIN_USER=""
 KEYCHAIN_HOST=""
 DEPLOYED_SHA1=""
 SYNCROOT=""
+SFTP_PUBLIC_KEY=""
+SFTP_PRIVATE_KEY=""
+declare -i SFTP_INSECURE=0
 CURL_UPLOADS=()
 declare -a CURL_ARGS
 declare -i CURL_INSECURE=0
@@ -639,8 +642,27 @@ handle_submodule_sync() {
 }
 
 handle_remote_protocol_options() {
-	# SFTP uses a different remove command and uses absolute paths
-	[ "$REMOTE_PROTOCOL" = "sftp" ] && REMOTE_DELETE_CMD="rm /"
+	
+	if [ "$REMOTE_PROTOCOL" == "sftp" ]; then
+		
+		set_sftp_config
+		
+		if [ ! -z "$SFTP_PRIVATE_KEY" ]; then
+			if [ -z "$SFTP_PUBLIC_KEY" ]; then
+				# If public key is not specified, use private key with .pub extension
+				SFTP_PUBLIC_KEY="$SFTP_PRIVATE_KEY.pub"
+			fi
+			REMOTE_CMD_OPTIONS="$REMOTE_CMD_OPTIONS --key $SFTP_PRIVATE_KEY --pubkey $SFTP_PUBLIC_KEY"
+		fi
+		
+		if [ $SFTP_INSECURE -eq 1 ]; then
+			REMOTE_CMD_OPTIONS="$REMOTE_CMD_OPTIONS --insecure"
+		fi
+		
+		# SFTP uses a different remove command and uses absolute paths
+		REMOTE_DELETE_CMD="rm /"
+	fi
+	
 
 	# Check for using cacert
 	if [ "$REMOTE_PROTOCOL" = "ftpes" -o "$REMOTE_PROTOCOL" = "ftps" ] && \
@@ -703,6 +725,12 @@ set_syncroot() {
 		[ -d $SYNCROOT ] || print_error_and_die "'$SYNCROOT' is not a directory! Exiting..." $ERROR_GIT
 		SYNCROOT=$(echo $SYNCROOT | sed 's#/*$##')/
 	fi
+}
+
+set_sftp_config() {
+	[ -z $SFTP_PRIVATE_KEY ] && SFTP_PRIVATE_KEY="$(get_config sftp-key)"
+	[ -z $SFTP_PUBLIC_KEY ] && SFTP_PUBLIC_KEY="$(get_config sftp-public-key)"
+	SFTP_INSECURE="$(get_config sftp-insecure)"
 }
 
 set_remotes() {
